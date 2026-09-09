@@ -4,5 +4,12 @@
     "name": "CarryAwareNJ",
     "appleId": "6762150416"
   },
-  "releases": []
+  "releases": [
+    {
+      "version": "1.0.5",
+      "releaseDate": "2026-09-08",
+      "releaseNotes": "This update significantly expands CarryAwareNJ’s map, alert, and community-reporting capabilities:\n\n• Expanded and corrected restricted-location data, including alcohol-related establishments\n• Faster viewport-based loading as you move around the map\n• Improved marker, clustering, and map stability\n• More customizable alert categories, distances, quiet zones, and statute links\n• Improved community reporting with nearby-place and street-address selection\n• Establishment photos can now be added while creating a report or afterward\n• Community voting, photo moderation, content reporting, and contributor blocking\n• Categorized remote updates and improved notification handling\n• Account deletion, privacy, and reliability improvements\n\nThank you for helping improve CarryAwareNJ.",
+      "appStoreUrl": "https://apps.apple.com/us/app/carryawarenj/id6762150416"
+    }
+  ]
 }
