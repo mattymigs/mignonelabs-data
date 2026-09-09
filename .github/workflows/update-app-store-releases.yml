@@ -1,0 +1,82 @@
+name: Update App Store release data
+
+on:
+  schedule:
+    - cron: "17 */6 * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  update-carryawarenj:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Fetch latest CarryAwareNJ release from Apple
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          import json
+          import urllib.request
+          from pathlib import Path
+          from datetime import datetime, timezone
+
+          path = Path("apps/carryawarenj.json")
+          data = json.loads(path.read_text())
+          apple_id = data["app"]["appleId"]
+
+          url = f"https://itunes.apple.com/lookup?id={apple_id}&country=us"
+          req = urllib.request.Request(url, headers={"User-Agent": "MignoneLabsReleaseBot/1.0"})
+          with urllib.request.urlopen(req, timeout=30) as response:
+              payload = json.load(response)
+
+          if payload.get("resultCount") != 1:
+              raise SystemExit(f"Unexpected Apple response: resultCount={payload.get('resultCount')}")
+
+          app = payload["results"][0]
+          version = app.get("version")
+          release_notes = app.get("releaseNotes", "").strip()
+          release_date_raw = app.get("currentVersionReleaseDate", "")
+          app_store_url = app.get("trackViewUrl", f"https://apps.apple.com/us/app/id{apple_id}")
+
+          if not version:
+              raise SystemExit("Apple response did not include a version")
+
+          release_date = release_date_raw[:10] if release_date_raw else datetime.now(timezone.utc).date().isoformat()
+
+          releases = data.setdefault("releases", [])
+          existing_index = next((i for i, r in enumerate(releases) if r.get("version") == version), None)
+          latest = {
+              "version": version,
+              "releaseDate": release_date,
+              "releaseNotes": release_notes,
+              "appStoreUrl": app_store_url,
+          }
+
+          if existing_index is None:
+              releases.insert(0, latest)
+          else:
+              releases[existing_index] = latest
+              if existing_index != 0:
+                  releases.insert(0, releases.pop(existing_index))
+
+          path.write_text(json.dumps(data, indent=2, ensure_ascii=False) + "\n")
+          print(f"Latest App Store release: {version} ({release_date})")
+          PY
+
+      - name: Commit release-data changes
+        shell: bash
+        run: |
+          if git diff --quiet -- apps/carryawarenj.json; then
+            echo "No release-data changes."
+            exit 0
+          fi
+
+          git config user.name "mignonelabs-release-bot"
+          git config user.email "actions@users.noreply.github.com"
+          git add apps/carryawarenj.json
+          git commit -m "Update CarryAwareNJ App Store release data"
+          git push
