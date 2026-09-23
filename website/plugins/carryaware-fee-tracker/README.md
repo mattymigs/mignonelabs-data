@@ -9,3 +9,5 @@ After explicit publication approval: install/activate this plugin (defaults to p
 The local preview harness renders these exact assets against the review checkout's JSON. It is bound to 127.0.0.1 and never writes to WordPress. Browser rendering tests are independent of WordPress integration; a signed-in preview on the live theme is still a release check.
 
 Rollback: change the page back to draft, disable public mode or deactivate the plugin, and purge the page cache. Deactivation resets public mode. No legal alert feed or Firebase notification is changed by this plugin.
+
+Public labels use “Reported full/substantial relief” and “Evidence last reviewed” to distinguish attributed reporting from municipal verification. Legacy JSON status and date keys remain unchanged for compatibility. Point Pleasant remains pending documents.

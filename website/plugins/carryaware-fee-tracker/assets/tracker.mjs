@@ -1,5 +1,5 @@
 export const STATUS = {
-  verified_full_or_substantial: 'Full / substantial', verified_partial: 'Partial relief',
+  verified_full_or_substantial: 'Reported full/substantial relief', verified_partial: 'Partial relief',
   announced_pending_documents: 'Pending documents', under_consideration: 'Under consideration',
   inactive_or_repealed: 'Inactive / repealed'
 };
@@ -69,7 +69,7 @@ export async function mount(host,feedURL){
     for(const button of root.querySelectorAll('[data-sort]')){button.parentElement.removeAttribute('aria-sort');if(button.dataset.sort===sort)button.parentElement.setAttribute('aria-sort',direction===1?'ascending':'descending');}
   }
   function apply(data){feed=validateFeed(data);for(const [key,value] of Object.entries(totals(feed)))root.querySelector(`[data-stat="${key}"]`).textContent=value;
-    root.querySelector('[data-last-verified]').textContent=`Last verified: ${dateLabel(feed.last_verified_at)}`;
+    root.querySelector('[data-last-verified]').textContent=`Evidence last reviewed: ${dateLabel(feed.last_verified_at)}`;
     root.querySelector('[data-last-checked]').textContent=`Sources checked: ${dateLabel(feed.last_checked_at)}`;
     const featured=feed.municipalities.find(r=>r.municipality_code==='1525');
     const notice=root.querySelector('[data-featured-notice]');notice.hidden=!featured;
@@ -91,7 +91,7 @@ export async function mount(host,feedURL){
     }catch{
       let cached=null;try{const raw=sessionStorage.getItem(cacheKey);if(raw)cached=validateFeed(JSON.parse(raw));}catch{}
       if(cached){apply(cached);showMessage(`The live feed is unavailable. Showing a saved snapshot checked ${dateLabel(cached.last_checked_at)}; it may be out of date. Confirm with the municipality.`,true);}
-      else{feed=null;root.querySelector('[data-featured-notice]').hidden=true;tbody.replaceChildren();for(const n of root.querySelectorAll('[data-stat]'))n.textContent='—';root.querySelector('[data-last-verified]').textContent='Verification dates unavailable';root.querySelector('[data-last-checked]').textContent='';root.querySelector('[data-result-count]').textContent='Municipality records are temporarily unavailable.';root.querySelector('[data-empty]').hidden=true;showMessage('We could not load the fee tracker. Try again or contact support@mignonelabs.com. Confirm fees directly with your municipality.',true);}
+      else{feed=null;root.querySelector('[data-featured-notice]').hidden=true;tbody.replaceChildren();for(const n of root.querySelectorAll('[data-stat]'))n.textContent='—';root.querySelector('[data-last-verified]').textContent='Evidence review dates unavailable';root.querySelector('[data-last-checked]').textContent='';root.querySelector('[data-result-count]').textContent='Municipality records are temporarily unavailable.';root.querySelector('[data-empty]').hidden=true;showMessage('We could not load the fee tracker. Try again or contact support@mignonelabs.com. Confirm fees directly with your municipality.',true);}
     }finally{clearTimeout(timer);}
   }
   form.addEventListener('submit',e=>e.preventDefault());form.addEventListener('input',e=>{if(e.target.tagName==='INPUT')render();});form.addEventListener('change',e=>{if(e.target.tagName==='SELECT')render();});form.addEventListener('reset',()=>setTimeout(render,0));
