@@ -8,6 +8,7 @@ $test_actions = array();
 $test_filters = array();
 $test_registered = array();
 $test_autoload = array();
+$test_alloptions = array();
 $test_errors = array();
 $test_calls = array();
 $test_admin = false;
@@ -22,7 +23,8 @@ class WP_Post {
 }
 $test_post = new WP_Post();
 function get_option($key, $default = false) { global $test_options; return $test_options[$key] ?? $default; }
-function add_option($key, $value, $deprecated = '', $autoload = true) { global $test_options, $test_autoload; $test_autoload[$key] = $autoload; if (!array_key_exists($key, $test_options)) { $test_options[$key] = $value; } }
+function add_option($key, $value, $deprecated = '', $autoload = true) { global $test_options, $test_autoload; if (array_key_exists($key, $test_options)) { return false; } $test_options[$key] = $value; $test_autoload[$key] = $autoload; do_action('add_option_' . $key, $key, $value); return true; }
+function wp_set_option_autoload_values($options) { global $test_autoload, $test_alloptions; foreach ($options as $key=>$value) { $test_autoload[$key] = $value; if (!$value) { unset($test_alloptions[$key]); } } }
 function delete_option($key) { global $test_options; unset($test_options[$key]); }
 function current_user_can($capability) { global $test_admin; return $capability === 'manage_options' && $test_admin; }
 function get_the_ID() { global $test_loop_id; return $test_loop_id; }
@@ -66,7 +68,30 @@ $data_path = getenv('CARRY_FEE_DATA_PATH');
 if (!$data_path) { throw new RuntimeException('Set CARRY_FEE_DATA_PATH to the canonical review dataset.'); }
 $raw = file_get_contents($data_path);
 $feed = cft_decode_preview($raw);
-expect(is_object($feed) && count($feed->municipalities) === 20, 'unchanged supplied dataset validates');
+expect(is_object($feed) && count($feed->municipalities) === 564, 'complete statewide dataset validates');
+$legacy = copy_feed($feed); $legacy->schema_version = 1;
+$legacy->municipalities = array_values(array_filter($legacy->municipalities, fn($row) => $row->status !== 'policy_not_yet_verified'));
+foreach ($legacy->municipalities as $row) {
+    if (in_array($row->status, array('confirmed_full_or_substantial', 'reported_full_or_substantial'), true)) { $row->status = 'verified_full_or_substantial'; }
+    if ($row->status === 'confirmed_partial') { $row->status = 'verified_partial'; }
+}
+expect(count($legacy->municipalities) === 20 && cft_valid_preview_feed($legacy), 'version one evidence subset remains readable during the plugin upgrade');
+$bad = copy_feed($feed); array_pop($bad->municipalities);
+expect(!cft_valid_preview_feed($bad), 'incomplete version two statewide roster rejected');
+$bad = copy_feed($feed); $bad->municipalities[0]->county = 'Ocean';
+expect(!cft_valid_preview_feed($bad), 'county and municipality code mismatch rejected');
+$bad = copy_feed($feed); $bad->municipalities[0]->directory_checked_at = '2026-09-22';
+expect(!cft_valid_preview_feed($bad), 'directory provenance mismatch rejected');
+$unknown_index = array_key_first(array_filter($feed->municipalities, fn($row) => $row->status === 'policy_not_yet_verified'));
+foreach (array('refund_amount'=>0, 'net_municipal_cost'=>0, 'verified_at'=>'2026-09-24', 'last_checked_at'=>'2026-09-24', 'effective_date'=>'2026-09-24', 'official_source_url'=>'https://example.com/') as $field=>$value) {
+    $bad = copy_feed($feed); $bad->municipalities[$unknown_index]->$field = $value;
+    expect(!cft_valid_preview_feed($bad), 'unresearched policy cannot gain ' . $field . ' merely from directory inclusion');
+}
+$bad = copy_feed($feed); $bad->municipalities[$unknown_index]->status = 'confirmed_full_or_substantial';
+expect(!cft_valid_preview_feed($bad), 'missing policy evidence cannot become confirmed relief');
+$reported_index = array_key_first(array_filter($feed->municipalities, fn($row) => $row->status === 'reported_full_or_substantial'));
+$bad = copy_feed($feed); $bad->municipalities[$reported_index]->status = 'confirmed_full_or_substantial';
+expect(!cft_valid_preview_feed($bad), 'advocacy reporting alone cannot become official confirmation');
 expect(cft_decode_preview(str_repeat(' ', CFT_PREVIEW_MAX_BYTES + 1)) === null, 'oversized input rejected');
 expect(cft_decode_preview('{bad') === null && cft_decode_preview('null') === null, 'malformed/root-null JSON rejected');
 $bad = copy_feed($feed); $bad->municipalities[] = $bad->municipalities[0];
@@ -87,7 +112,7 @@ $bad = copy_feed($feed); $bad->municipalities[0]->secondary_source_url = 'https:
 expect(!cft_valid_preview_feed($bad), 'URL credentials rejected');
 $bad = copy_feed($feed); $bad->municipalities[0]->municipality_code = 1505;
 expect(!cft_valid_preview_feed($bad), 'numeric municipality code rejected');
-$bad = copy_feed($feed); $bad->municipalities[0]->status = 'announced_pending_documents';
+$bad = copy_feed($feed); $bad->municipalities[$reported_index]->status = 'announced_pending_documents';
 expect(!cft_valid_preview_feed($bad), 'pending record cannot carry verified date');
 $bad = copy_feed($feed); unset($bad->municipalities[0]->official_source_url);
 expect(!cft_valid_preview_feed($bad), 'missing nullable field rejected');
@@ -101,8 +126,15 @@ expect(cft_sanitize_preview('{bad') === $raw && count($test_errors) === 1, 'inva
 $expanded = copy_feed($feed); $expanded->municipalities[0]->notes = str_repeat('<', 170000);
 $expanded_raw = json_encode($expanded, JSON_UNESCAPED_SLASHES);
 expect(strlen($expanded_raw) < CFT_PREVIEW_MAX_BYTES && cft_sanitize_preview($expanded_raw) === $raw && count($test_errors) === 2, 'HEX-expanded snapshot exceeding inline size limit rejected before save');
+$test_autoload['cft_preview_json'] = 'auto';
+$test_alloptions = array('cft_preview_json'=>$raw, 'unrelated_option'=>'keep');
 do_action('admin_init');
-expect($test_autoload['cft_preview_json'] === false, 'option created without autoload');
+expect($test_autoload['cft_preview_json'] === false && $test_options['cft_preview_json'] === $raw, 'existing auto-loaded snapshot migrated without changing its value');
+expect(!isset($test_alloptions['cft_preview_json']) && $test_alloptions['unrelated_option'] === 'keep', 'snapshot migration targets only its own alloptions cache entry');
+$test_autoload['cft_preview_json'] = 'auto'; do_action('update_option_cft_preview_json', $raw, $raw);
+expect($test_autoload['cft_preview_json'] === false, 'subsequent snapshot saves enforce non-autoload storage');
+$test_autoload['cft_preview_json'] = 'auto'; do_action('add_option_cft_preview_json', 'cft_preview_json', $raw);
+expect($test_autoload['cft_preview_json'] === false, 'first snapshot save also enforces non-autoload storage');
 expect($test_registered['cft_preview_json']['args']['show_in_rest'] === false, 'snapshot is not REST exposed');
 expect($test_registered['cft_preview_json']['args']['sanitize_callback'] === 'cft_sanitize_preview', 'validation wired to Settings API');
 expect(cft_sanitize_public(cft_sanitize_public('1')) === true && cft_sanitize_public(cft_sanitize_public('0')) === false, 'public flag sanitizer is idempotent');

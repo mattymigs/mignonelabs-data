@@ -2,7 +2,7 @@
 /**
  * Plugin Name: CarryAwareNJ Municipal Fee Tracker
  * Description: Municipal carry-fee tracker backed by carryaware-data. Preview first; public mode requires an explicit setting.
- * Version: 1.0.1-review2
+ * Version: 1.1.0-review3
  * Requires at least: 6.5
  * Requires PHP: 8.0
  * Author: Mignone Labs LLC
@@ -10,7 +10,7 @@
  */
 if (!defined('ABSPATH')) { exit; }
 const CFT_FEED_URL = 'https://mattymigs.github.io/carryaware-data/nj_carry_fee_relief.json';
-const CFT_VERSION = '1.0.1-review2';
+const CFT_VERSION = '1.1.0-review3';
 const CFT_PREVIEW_MAX_BYTES = 1000000;
 
 // The JSON option is never exposed through REST or a public file/URL.
@@ -25,19 +25,36 @@ function cft_valid_https($value) {
     return is_array($parts) && ($parts['scheme'] ?? '') === 'https' && !empty($parts['host']) && !isset($parts['user']) && !isset($parts['pass']);
 }
 function cft_valid_preview_feed($feed) {
-    if (!is_object($feed) || ($feed->schema_version ?? null) !== 1 || ($feed->state_municipality_count ?? null) !== 564 || !isset($feed->municipalities) || !is_array($feed->municipalities) || count($feed->municipalities) > 564) { return false; }
+    if (!is_object($feed) || !in_array($feed->schema_version ?? null, array(1, 2), true) || ($feed->state_municipality_count ?? null) !== 564 || !isset($feed->municipalities) || !is_array($feed->municipalities) || count($feed->municipalities) > 564) { return false; }
+    $statewide = $feed->schema_version === 2;
+    if ($statewide) {
+        $roster = $feed->directory_roster ?? null;
+        if (count($feed->municipalities) !== 564 || !is_object($roster) || ($roster->municipality_count ?? null) !== 564 || ($roster->county_count ?? null) !== 21 || !isset($roster->checked_at) || !cft_valid_date($roster->checked_at)) { return false; }
+        foreach (array('source_url', 'query_url', 'secondary_source_url') as $key) {
+            if (!cft_valid_https($roster->$key ?? null)) { return false; }
+        }
+    }
     foreach (array('last_checked_at', 'last_verified_at') as $key) {
         if (!property_exists($feed, $key) || !cft_valid_date($feed->$key) || ($key === 'last_checked_at' && $feed->$key === null)) { return false; }
     }
-    $statuses = array('verified_full_or_substantial', 'verified_partial', 'announced_pending_documents', 'under_consideration', 'inactive_or_repealed');
+    $statuses = $statewide
+        ? array('confirmed_full_or_substantial', 'confirmed_partial', 'reported_full_or_substantial', 'announced_pending_documents', 'policy_not_yet_verified', 'under_consideration', 'inactive_or_repealed')
+        : array('verified_full_or_substantial', 'verified_partial', 'announced_pending_documents', 'under_consideration', 'inactive_or_repealed');
     $sources = array('official_resolution', 'official_minutes', 'official_police', 'official_agenda', 'official_notice', 'advocacy_reporting', 'secondary_reporting', 'social_media');
     $codes = array();
+    $counties = array();
+    $county_codes = array('01'=>'Atlantic','02'=>'Bergen','03'=>'Burlington','04'=>'Camden','05'=>'Cape May','06'=>'Cumberland','07'=>'Essex','08'=>'Gloucester','09'=>'Hudson','10'=>'Hunterdon','11'=>'Mercer','12'=>'Middlesex','13'=>'Monmouth','14'=>'Morris','15'=>'Ocean','16'=>'Passaic','17'=>'Salem','18'=>'Somerset','19'=>'Sussex','20'=>'Union','21'=>'Warren');
     foreach ($feed->municipalities as $row) {
-        if (!is_object($row) || !isset($row->municipality_code) || !is_string($row->municipality_code) || !preg_match('/^\d{4}$/D', $row->municipality_code) || isset($codes[$row->municipality_code]) || !in_array($row->status ?? null, $statuses, true) || !in_array($row->source_type ?? null, $sources, true)) { return false; }
+        if (!is_object($row) || !isset($row->municipality_code) || !is_string($row->municipality_code) || !preg_match('/^\d{4}$/D', $row->municipality_code) || isset($codes[$row->municipality_code]) || !in_array($row->status ?? null, $statuses, true)) { return false; }
+        $unverified = $statewide && $row->status === 'policy_not_yet_verified';
+        if (!property_exists($row, 'source_type') || (!$unverified && !in_array($row->source_type, $sources, true)) || ($unverified && $row->source_type !== null)) { return false; }
         $codes[$row->municipality_code] = true;
         foreach (array('municipality', 'county', 'municipality_type', 'application_instructions', 'eligibility_summary', 'notes') as $key) {
             if (!isset($row->$key) || !is_string($row->$key) || trim($row->$key) === '') { return false; }
         }
+        if (($county_codes[substr($row->municipality_code, 0, 2)] ?? null) !== $row->county) { return false; }
+        $counties[$row->county] = true;
+        if ($statewide && (!cft_valid_https($row->directory_source_url ?? null) || ($row->directory_checked_at ?? null) !== $feed->directory_roster->checked_at || !isset($row->evidence) || !is_array($row->evidence))) { return false; }
         foreach (array('refund_amount', 'net_municipal_cost') as $key) {
             if (!property_exists($row, $key)) { return false; }
             $value = $row->$key;
@@ -50,10 +67,19 @@ function cft_valid_preview_feed($feed) {
         foreach (array('official_source_url', 'secondary_source_url') as $key) {
             if (!property_exists($row, $key) || ($row->$key !== null && !cft_valid_https($row->$key))) { return false; }
         }
-        if (!$row->official_source_url && !$row->secondary_source_url) { return false; }
+        if ($unverified) {
+            // A directory entry carries no conclusion about the local policy or cost.
+            foreach (array('refund_amount', 'net_municipal_cost', 'effective_date', 'retroactive_date', 'verified_at', 'last_checked_at', 'official_source_url', 'secondary_source_url') as $key) {
+                if ($row->$key !== null) { return false; }
+            }
+            if (($row->relief_type ?? null) !== 'unknown' || count($row->evidence) !== 0) { return false; }
+        } elseif (!$row->official_source_url && !$row->secondary_source_url) { return false; }
+        if ($statewide && !$unverified && ($row->last_checked_at === null || count($row->evidence) === 0)) { return false; }
+        if ($statewide && str_starts_with($row->status, 'confirmed_') && (!$row->official_source_url || !in_array($row->source_type, array('official_resolution', 'official_minutes', 'official_police', 'official_notice'), true) || $row->verified_at === null)) { return false; }
         if (str_starts_with($row->status, 'verified_') && $row->verified_at === null) { return false; }
         if ($row->status === 'announced_pending_documents' && $row->verified_at !== null) { return false; }
     }
+    if ($statewide && count($counties) !== 21) { return false; }
     return true;
 }
 function cft_decode_preview($raw) {
@@ -114,9 +140,17 @@ add_shortcode('carryaware_fee_tracker', 'cft_shortcode');
 add_action('admin_menu', static function () {
     add_management_page('CarryAwareNJ Fee Tracker', 'CarryAwareNJ Fee Tracker', 'manage_options', 'carryaware-fee-tracker', 'cft_admin');
 });
+function cft_disable_snapshot_autoload() {
+    // add_option() cannot repair an existing option; this API also evicts alloptions.
+    // Available since WP 6.4, before this plugin's minimum supported WP version.
+    wp_set_option_autoload_values(array('cft_preview_json' => false));
+}
+add_action('add_option_cft_preview_json', 'cft_disable_snapshot_autoload');
+add_action('update_option_cft_preview_json', 'cft_disable_snapshot_autoload');
 add_action('admin_init', static function () {
     // Create before the first save so the snapshot is not autoloaded on every request.
     add_option('cft_preview_json', '', '', false);
+    cft_disable_snapshot_autoload();
     register_setting('cft_settings', 'cft_public_enabled', array('type'=>'boolean','default'=>false,'sanitize_callback'=>'cft_sanitize_public'));
     register_setting('cft_settings', 'cft_preview_json', array('type'=>'string', 'default'=>'', 'show_in_rest'=>false, 'sanitize_callback'=>'cft_sanitize_preview'));
 });

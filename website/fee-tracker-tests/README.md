@@ -10,9 +10,9 @@ php website/tests/site-plugin-test.php
 node --check website/plugins/carryaware-fee-tracker/assets/tracker.mjs
 ```
 
-The integrated PHP harness has 44 assertions covering preview validation, administrator/unpublished-page access, escaping, malformed snapshots, published pages ignoring snapshots, Settings API registration, idempotent sanitization, cache hooks, cleanup, and consistent municipal costs. These use stub WordPress APIs.
+The integrated PHP harness has 59 assertions covering preview validation, administrator/unpublished-page access, escaping, malformed snapshots, published pages ignoring snapshots, Settings API registration, idempotent sanitization, cache hooks, cleanup, consistent municipal costs, schema-2 statewide coverage, unverified-policy nulls, county identities, and snapshot autoload repair. These use stub WordPress APIs.
 
-`browser-preview.test.cjs` starts a temporary server on loopback, blocks external browser requests, tests the actual plugin assets, and closes the server after testing. It checks private snapshots without feed requests or browser storage, invalid data without live fallback, source/status labels, filters, expanded instructions, hostile text, public mode and outages, and mobile/desktop layout. `CFT_OUTPUT_DIR` controls screenshots/report output; the default is a directory under the OS temporary directory.
+`browser-preview.test.cjs` starts a temporary server on loopback, blocks external browser requests, tests the actual plugin assets, and closes the server after testing. It checks private snapshots without feed requests or browser storage, invalid data without live fallback, source/status labels, all 564 municipalities, separate policy progress, county/status filters, 20-row pagination, same-name identities, unknown policy dates/amounts, expanded instructions, hostile text, public mode and outages, and mobile/desktop layout. The current suite has 15 model tests and 30 browser checks; the original public-feed suite adds 11 regression checks. `CFT_OUTPUT_DIR` controls screenshots/report output; the default is a directory under the OS temporary directory.
 
 ```sh
 CFT_BROWSER_PATH='/Applications/Google Chrome.app/Contents/MacOS/Google Chrome' \
