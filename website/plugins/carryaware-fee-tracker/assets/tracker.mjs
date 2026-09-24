@@ -14,6 +14,7 @@ export function validateFeed(feed) {
     ids.add(r.municipality_code);
     for(const key of ['municipality','county','municipality_type','application_instructions','eligibility_summary','notes']) if(typeof r[key]!=='string' || !r[key].trim()) throw new Error('Incomplete record');
     for(const key of ['refund_amount','net_municipal_cost']) if(r[key]!==null && (typeof r[key]!=='number' || !Number.isFinite(r[key]) || r[key]<0 || r[key]>150)) throw new Error('Invalid fee');
+    if(r.statutory_municipal_portion!==150 || (r.refund_amount!==null && r.net_municipal_cost!==null && Math.abs(r.refund_amount+r.net_municipal_cost-150)>0.000001)) throw new Error('Inconsistent municipal fee');
     for(const key of ['effective_date','retroactive_date','verified_at','last_checked_at']) if(!validDate(r[key])) throw new Error('Invalid date');
     for(const key of ['official_source_url','secondary_source_url']) if(r[key]!==null && !https(r[key])) throw new Error('Invalid source');
     if(!r.official_source_url && !r.secondary_source_url) throw new Error('Source missing');
@@ -38,6 +39,7 @@ export async function mount(host,feedURL){
   const root=host.querySelector('.cft');if(!root)return;
   const form=root.querySelector('form'),tbody=root.querySelector('tbody'),message=root.querySelector('[data-feed-message]');
   let feed=null, sort='municipality',direction=1;
+  const privateSnapshot=host.dataset.previewMode==='private-snapshot';
   const cacheKey='carryaware-fees-v1:'+feedURL;
   function showMessage(text,retry=false){message.replaceChildren(el('span',text));message.hidden=false;if(retry){const b=el('button','Try again');b.type='button';b.addEventListener('click',load);message.append(b);}}
   function render(){
@@ -97,6 +99,21 @@ export async function mount(host,feedURL){
   form.addEventListener('submit',e=>e.preventDefault());form.addEventListener('input',e=>{if(e.target.tagName==='INPUT')render();});form.addEventListener('change',e=>{if(e.target.tagName==='SELECT')render();});form.addEventListener('reset',()=>setTimeout(render,0));
   root.querySelector('[name=sort]').addEventListener('change',e=>{sort=e.target.value;direction=1;render();});
   for(const button of root.querySelectorAll('[data-sort]'))button.addEventListener('click',()=>{direction=sort===button.dataset.sort?-direction:1;sort=button.dataset.sort;root.querySelector('[name=sort]').value=sort;render();});
-  await load();
+  if(privateSnapshot){
+    // Authentication happens in PHP. This mode never fetches or touches sessionStorage.
+    const banner=el('p','PRIVATE PREVIEW — saved snapshot; no live updates. Visible only to administrators on an unpublished page.','cft-feed-message');
+    root.prepend(banner);
+    try{
+      const source=host.querySelector(':scope > script[type="application/json"][data-cft-preview-data]');
+      if(!source || source.textContent.length>1000000)throw new Error('Preview snapshot missing');
+      apply(JSON.parse(source.textContent));
+    }catch{
+      root.querySelector('[data-featured-notice]').hidden=true;
+      root.querySelector('[data-result-count]').textContent='Private preview data is unavailable.';
+      showMessage('The private snapshot is missing or invalid. Save valid review JSON in WordPress tracker settings, then reload this draft. No live data was loaded.');
+    }
+  }else{
+    await load();
+  }
 }
 if(typeof document!=='undefined')for(const host of document.querySelectorAll('[data-carryaware-fee-tracker]'))mount(host,host.dataset.feedUrl);

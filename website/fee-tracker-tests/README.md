@@ -1,17 +1,29 @@
 # Fee tracker checks
 
+Use the canonical review dataset; no duplicate is bundled in this repository:
+
 ```sh
-CARRY_FEE_DATA_PATH=/absolute/path/to/carryaware-data/nj_carry_fee_relief.json node --test website/fee-tracker-tests/tracker.test.mjs
+export CARRY_FEE_DATA_PATH=/absolute/path/to/carryaware-data/nj_carry_fee_relief.json
+node --test website/fee-tracker-tests/tracker.test.mjs
 php website/fee-tracker-tests/plugin-test.php
 php website/tests/site-plugin-test.php
+node --check website/plugins/carryaware-fee-tracker/assets/tracker.mjs
 ```
 
-`browser.test.cjs` requires Playwright 1.62.1 and a loopback preview at port 8765 with `/api/nj_carry_fee_relief.json` and `/alert/`, using the actual tracker assets. It tests desktop and mobile rendering, filters, sorting, distinct municipality names, expandable instructions, no-cache outages, dated cached fallback, and the draft alert's three buttons/credit. Screenshots go to `CFT_OUTPUT_DIR` (default `output`). Use `CFT_BROWSER_PATH` for a locally installed Chromium/Chrome, or install Playwright's Chromium. It starts a separate headless browser profile and never signs in or sends a notification. The task handoff contains the loopback preview server.
+The integrated PHP harness has 44 assertions covering preview validation, administrator/unpublished-page access, escaping, malformed snapshots, published pages ignoring snapshots, Settings API registration, idempotent sanitization, cache hooks, cleanup, and consistent municipal costs. These use stub WordPress APIs.
+
+`browser-preview.test.cjs` starts a temporary server on loopback, blocks external browser requests, tests the actual plugin assets, and closes the server after testing. It checks private snapshots without feed requests or browser storage, invalid data without live fallback, source/status labels, filters, expanded instructions, hostile text, public mode and outages, and mobile/desktop layout. `CFT_OUTPUT_DIR` controls screenshots/report output; the default is a directory under the OS temporary directory.
 
 ```sh
-cd website/fee-tracker-tests
-npm install
-CFT_BROWSER_PATH='/Applications/Google Chrome.app/Contents/MacOS/Google Chrome' node browser.test.cjs
+CFT_BROWSER_PATH='/Applications/Google Chrome.app/Contents/MacOS/Google Chrome' \
+  CFT_OUTPUT_DIR=/absolute/path/to/review-output \
+  node website/fee-tracker-tests/browser-preview.test.cjs
+# Optional interactive local asset preview; no WordPress authentication is emulated:
+node website/fee-tracker-tests/browser-preview.test.cjs --serve
 ```
 
-These are local rendering tests and WordPress API stub tests, not a claim that the plugin has been installed on the live WordPress site. Check the signed-in draft page with the active theme and cache configuration before publication.
+Playwright 1.62.1 must be resolvable in Node. Use the installed workspace runtime through `NODE_PATH`, or install this directory's declared development dependency locally. `CFT_BROWSER_PATH` selects an existing Chrome/Chromium binary; no browser installation is required with that setting.
+
+`browser.test.cjs` retains the original public-feed regression checks and now checks the Build 18 single “View Source” alert link. It requires the coordinator's loopback server at port 8765 with `/api/nj_carry_fee_relief.json` and `/alert/`. Run it with the same `CFT_BROWSER_PATH` and an existing `CFT_OUTPUT_DIR`. It covers sorting, composed filters, Borough/Beach separation, cached/unavailable feeds, phone overflow, and exact credit.
+
+These are local rendering and WordPress stub checks. They do not prove core authentication, options.php nonce enforcement, script-module loading under the installed theme, or actual LiteSpeed/CDN caching. After authorization, verify administrator-only draft/snapshot access, anonymous/non-administrator denial, rejected settings saves, layout/links, no cache leakage after logout, and published pages using only the fixed production feed. No test here installs a plugin, mutates WordPress, changes a production feed, or sends notifications.

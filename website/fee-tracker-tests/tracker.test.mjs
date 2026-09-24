@@ -12,3 +12,7 @@ test('amount sort is numeric with unknown values last both ways',()=>{assert.equ
 test('dates are stable across time zones',()=>{assert.equal(dateLabel('2026-05-18'),'May 18, 2026');assert.equal(dateLabel(null),'Not confirmed');});
 test('malformed data never renders as totals',()=>{for(const mutate of [x=>x.municipalities.push(x.municipalities[0]),x=>x.municipalities[0].status='invalid',x=>x.municipalities[0].effective_date='2026-02-30',x=>x.municipalities[0].refund_amount='100',x=>x.municipalities[0].official_source_url='javascript:alert(1)']){const x=structuredClone(feed);mutate(x);assert.throws(()=>validateFeed(x));}});
 test('HTTPS rejects credentials and active schemes',()=>{for(const u of ['http://x.com','javascript:x','https://u:p@x.com'])assert.equal(https(u),false);assert.equal(https('https://ptboro.com/'),true);});
+test('refund and remaining municipal cost agree with the statutory portion',()=>{
+  const bad=structuredClone(feed);Object.assign(bad.municipalities[0],{refund_amount:100,net_municipal_cost:100});assert.throws(()=>validateFeed(bad),/Inconsistent municipal fee/);
+  const wrongPortion=structuredClone(feed);wrongPortion.municipalities[0].statutory_municipal_portion=200;assert.throws(()=>validateFeed(wrongPortion),/Inconsistent municipal fee/);
+});
