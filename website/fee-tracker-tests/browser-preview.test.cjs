@@ -74,7 +74,7 @@ async function main() {
     check('private preview is visibly labeled', /private preview/i.test(await page.locator('body').innerText()));
     check('private snapshot performs no feed requests', feedRequests.length === 0);
     check('private snapshot does not read or write browser storage', await page.evaluate(() => window.storageTouches === 0 && sessionStorage.length === 0));
-    check('directory coverage and research progress are distinct', await page.locator('[data-stat="coveragePercent"]').innerText() === '100.00%' && /20 of 564.*3.55%/.test(await page.locator('[data-research-summary]').innerText()));
+    check('directory and research use explicit counts without coverage percentages', await page.locator('[data-stat="researched"]').innerText() === '20' && /564 of 564.*21 counties/.test(await page.locator('[data-directory-summary]').innerText()) && /20 of 564.*2 confirmed refund policies.*17 reported relief policies.*1 pending proposal.*544 policies are not yet verified/.test(await page.locator('[data-research-summary]').innerText()) && !/%/.test(await page.locator('.cft-coverage-stats, .cft-research').allTextContents().then(text => text.join(' '))));
     check('policy groups show 2 confirmed, 17 reported, 1 pending, 544 unverified', (await Promise.all(['confirmed','reported','pending','unverified'].map(key => page.locator(`[data-stat="${key}"]`).innerText()))).join(',') === '2,17,1,544');
     check('mobile has no horizontal page overflow', await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth));
     const previews = path.join(output, 'previews');

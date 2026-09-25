@@ -54,7 +54,7 @@ export function validateFeed(feed) {
 export function totals(feed){
   const rows=feed.municipalities, statuses=rows.map(policyStatus), count=predicate=>statuses.filter(predicate).length;
   const unverified=count(status=>status==='policy_not_yet_verified'), researched=rows.length-unverified;
-  return {total:rows.length,stateTotal:feed.state_municipality_count,coveragePercent:(rows.length/feed.state_municipality_count*100).toFixed(2)+'%',counties:new Set(rows.map(r=>r.county)).size,researched,researchPercent:(researched/feed.state_municipality_count*100).toFixed(2)+'%',confirmed:count(status=>status.startsWith('confirmed_')),reported:count(status=>status.startsWith('reported_')),pending:count(status=>['announced_pending_documents','under_consideration'].includes(status)),unverified};
+  return {total:rows.length,stateTotal:feed.state_municipality_count,counties:new Set(rows.map(r=>r.county)).size,researched,confirmed:count(status=>status.startsWith('confirmed_')),reported:count(status=>status.startsWith('reported_')),pending:count(status=>['announced_pending_documents','under_consideration'].includes(status)),unverified};
 }
 export function selectRows(rows,{search='',county='',status='',sort='municipality',direction=1}={}){
   const q=search.trim().toLocaleLowerCase('en-US');
@@ -125,8 +125,8 @@ export async function mount(host,feedURL){
   function apply(data){
     feed=validateFeed(data);const stats=totals(feed);
     for(const [key,value] of Object.entries(stats))for(const node of root.querySelectorAll(`[data-stat="${key}"]`))node.textContent=value;
-    root.querySelector('[data-research-summary]').textContent=`${stats.researched} of ${stats.stateTotal} municipalities (${stats.researchPercent}) have collected policy evidence. These include confirmed relief, attributed reports, and pending proposals.`;
-    root.querySelector('[data-directory-summary]').textContent=feed.schema_version===2?'All New Jersey municipalities are listed. Directory coverage is separate from policy research.':`This older feed lists ${stats.total} evidence entries; the remaining municipalities are not included in this snapshot. It is not a complete statewide directory.`;
+    root.querySelector('[data-research-summary]').textContent=`Policy evidence has been collected for ${stats.researched} of ${stats.stateTotal} municipalities, including ${stats.confirmed} confirmed refund policies, ${stats.reported} reported relief policies, and ${stats.pending} pending ${stats.pending === 1 ? 'proposal' : 'proposals'}. ${stats.unverified} policies are not yet verified.`;
+    root.querySelector('[data-directory-summary]').textContent=feed.schema_version===2?`Directory: ${stats.total} of ${stats.stateTotal} New Jersey municipalities listed across ${stats.counties} counties. A directory listing does not mean the policy has been researched or a refund confirmed.`:`This older feed lists ${stats.total} evidence entries; the remaining municipalities are not included in this snapshot. It is not a complete statewide directory.`;
     root.querySelector('[data-last-verified]').textContent=`Policy evidence last reviewed: ${dateLabel(feed.last_verified_at)}`;
     root.querySelector('[data-last-checked]').textContent=`Policy sources checked: ${dateLabel(feed.last_checked_at)}`;
     const provenance=root.querySelector('[data-roster-source]');provenance.replaceChildren();

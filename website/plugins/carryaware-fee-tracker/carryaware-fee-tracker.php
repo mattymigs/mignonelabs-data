@@ -2,7 +2,7 @@
 /**
  * Plugin Name: CarryAwareNJ Municipal Fee Tracker
  * Description: Municipal carry-fee tracker backed by carryaware-data. Preview first; public mode requires an explicit setting.
- * Version: 1.1.0-review3
+ * Version: 1.1.1
  * Requires at least: 6.5
  * Requires PHP: 8.0
  * Author: Mignone Labs LLC
@@ -10,7 +10,7 @@
  */
 if (!defined('ABSPATH')) { exit; }
 const CFT_FEED_URL = 'https://mattymigs.github.io/carryaware-data/nj_carry_fee_relief.json';
-const CFT_VERSION = '1.1.0-review3';
+const CFT_VERSION = '1.1.1';
 const CFT_PREVIEW_MAX_BYTES = 1000000;
 
 // The JSON option is never exposed through REST or a public file/URL.
